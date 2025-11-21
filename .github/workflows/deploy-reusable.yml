@@ -1,0 +1,58 @@
+name: Reusable Deploy Workflow
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        description: 'Deploy environment'
+        required: true
+        type: string
+      remote_target:
+        description: 'Remote target path'
+        required: true
+        type: string
+    secrets:
+      SSH_PRIVATE_KEY:
+        required: true
+      REMOTE_HOST:
+        required: true
+      REMOTE_USER:
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -p 10022 -H ${{ secrets.REMOTE_HOST }} >> ~/.ssh/known_hosts
+
+      - name: Deploy plugins
+        run: |
+          rsync -avz --delete \
+            -e "ssh -p 10022" \
+            ./wordpress/wp-content/plugins/ \
+            ${{ secrets.REMOTE_USER }}@${{ secrets.REMOTE_HOST }}:${{ inputs.remote_target }}/wp-content/plugins/
+
+      - name: Deploy themes
+        run: |
+          rsync -avz --delete \
+            -e "ssh -p 10022" \
+            --exclude 'twenty*/' \
+            ./wordpress/wp-content/themes/ \
+            ${{ secrets.REMOTE_USER }}@${{ secrets.REMOTE_HOST }}:${{ inputs.remote_target }}/wp-content/themes/
+
+      - name: Cleanup
+        if: always()
+        run: rm -f ~/.ssh/id_rsa

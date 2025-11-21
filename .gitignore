@@ -1,0 +1,38 @@
+# デフォルトですべてを除外
+/*
+
+# 許可ディレクトリ・ファイル
+!/wordpress/
+!README.md
+!/.github/
+!.gitignore
+
+# wordpress内はデフォルトですべて除外
+/wordpress/*
+
+# wp-contentディレクトリを許可
+!/wordpress/wp-content/
+
+# wp-content内はデフォルトですべて除外
+/wordpress/wp-content/*
+
+# プラグインとテーマディレクトリのみ許可
+!/wordpress/wp-content/plugins/
+!/wordpress/wp-content/themes/
+
+# 不要なプラグインは除外
+/wordpress/wp-content/plugins/hello.php
+/wordpress/wp-content/plugins/akismet/
+
+# デフォルトテーマは除外
+/wordpress/wp-content/themes/twenty*/
+
+# 開発関連ファイルは除外
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.log
+node_modules/
+.sass-cache/
+dist/
