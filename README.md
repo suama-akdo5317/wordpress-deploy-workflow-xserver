@@ -1,36 +1,27 @@
 # WordPress Deploy Workflow
 
-XserverへのWordPressデプロイを自動化するGitHub Actions ワークフロー集です。
+XserverへのWordPressデプロイを自動化するGitHub Actionsワークフローです。
 
 ## 概要
 
-このリポジトリには、WordPressのテーマとプラグインをXserverに自動デプロイするためのGitHub Actionsワークフローが含まれています。再利用可能なワークフロー設計により、環境に応じて必要なワークフローのみを使用できます。
+このリポジトリには、WordPressのテーマとプラグインをXserverに自動デプロイするためのGitHub Actionsワークフローが含まれています。
 
 ## ワークフロー構成
 
-### 1. deploy-reusable.yml（再利用可能ワークフロー）
-
-共通のデプロイロジックを含む基盤ワークフロー。他のワークフローから呼び出されます。
+### deploy.yml
 
 **デプロイ対象:**
-- `wp-content/plugins/` - WordPressプラグイン
-- `wp-content/themes/` - WordPressテーマ（`twenty*`テーマは除外）
-
-### 2. deploy-production.yml（Production環境）
+- `wordpress/wp-content/plugins/` - WordPressプラグイン
+- `wordpress/wp-content/themes/` - WordPressテーマ（`twenty*`テーマは除外）
 
 **トリガー:**
-- `main`ブランチへのpush
-- 手動実行（workflow_dispatch）
+- `main`ブランチへのpush → Production環境へデプロイ
+- `staging`ブランチへのpush → Staging環境へデプロイ
+- 手動実行（workflow_dispatch）→ 環境を選択してデプロイ
 
-**デプロイ先:** `REMOTE_TARGET_PROD`で指定されたパス
-
-### 3. deploy-staging.yml（Staging環境）
-
-**トリガー:**
-- `staging`ブランチへのpush
-- 手動実行（workflow_dispatch）
-
-**デプロイ先:** `REMOTE_TARGET_STAGING`で指定されたパス
+**デプロイ先:**
+- Production: `REMOTE_TARGET_PROD`で指定されたパス
+- Staging: `REMOTE_TARGET_STAGING`で指定されたパス
 
 ## セットアップ
 
@@ -41,10 +32,14 @@ GitHubリポジトリの Settings > Secrets and variables > Actions で以下の
 | シークレット名 | 説明 | 例 |
 |--------------|------|-----|
 | `SSH_PRIVATE_KEY` | SSH秘密鍵 | `-----BEGIN OPENSSH PRIVATE KEY-----...` |
-| `REMOTE_HOST` | デプロイ先ホスト名 | `example.xsrv.jp` |
-| `REMOTE_USER` | SSH接続ユーザー名 | `xserver-user` |
-| `REMOTE_TARGET_PROD` | Production環境のパス | `/home/user/example.com/public_html` |
-| `REMOTE_TARGET_STAGING` | Staging環境のパス | `/home/user/staging.example.com/public_html` |
+| `REMOTE_HOST` | デプロイ先ホスト名 | `xb766649.xbiz.jp` |
+| `REMOTE_USER` | SSH接続ユーザー名 | `xb766649` |
+| `REMOTE_TARGET_PROD` | Production環境のベースパス | `/home/xb766649/xb766649.xbiz.jp/public_html` |
+| `REMOTE_TARGET_STAGING` | Staging環境のベースパス | `/home/xb766649/staging.xb766649.xbiz.jp/public_html` |
+
+**注意:**
+- XserverのSSH接続はポート`10022`を使用します
+- `REMOTE_TARGET_*`には`/wp-content`を含めない基本パスを指定してください（ワークフローが自動的に`/wp-content`を追加します）
 
 ### ディレクトリ構成
 
@@ -54,9 +49,7 @@ GitHubリポジトリの Settings > Secrets and variables > Actions で以下の
 .
 ├── .github/
 │   └── workflows/
-│       ├── deploy-reusable.yml
-│       ├── deploy-production.yml
-│       └── deploy-staging.yml
+│       └── deploy.yml
 └── wordpress/
     └── wp-content/
         ├── plugins/
@@ -67,40 +60,34 @@ GitHubリポジトリの Settings > Secrets and variables > Actions で以下の
 
 ## 使い方
 
-### Staging環境が不要な場合
+### 自動デプロイ
 
-`deploy-staging.yml`を削除してください:
+- `main`ブランチにpush → 自動的にProduction環境へデプロイ
+- `staging`ブランチにpush → 自動的にStaging環境へデプロイ
 
-```bash
-rm .github/workflows/deploy-staging.yml
-```
+### 手動デプロイ
+
+1. GitHubリポジトリの「Actions」タブを開く
+2. 「Deploy to Xserver」ワークフローを選択
+3. 「Run workflow」をクリック
+4. デプロイ先の環境（staging/production）を選択
+5. 「Run workflow」を実行
 
 ### 新しい環境を追加する場合
 
-`deploy-production.yml`や`deploy-staging.yml`を参考に、新しいワークフローファイルを作成してください:
+[deploy.yml](.github/workflows/deploy.yml)の`Determine deploy target`ステップを編集して、新しいブランチと環境変数を追加してください:
 
 ```yaml
-name: Deploy to Development
-
-on:
-  push:
-    branches:
-      - develop
-  workflow_dispatch:
-
-permissions:
-  contents: read
-
-jobs:
-  deploy:
-    uses: ./.github/workflows/deploy-reusable.yml
-    with:
-      environment: development
-      remote_target: ${{ secrets.REMOTE_TARGET_DEV }}
-    secrets:
-      SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
-      REMOTE_HOST: ${{ secrets.REMOTE_HOST }}
-      REMOTE_USER: ${{ secrets.REMOTE_USER }}
+- name: Determine deploy target
+  id: target
+  run: |
+    if [ "${{ github.ref }}" = "refs/heads/main" ]; then
+      echo "base_path=${{ secrets.REMOTE_TARGET_PROD }}/wp-content" >> $GITHUB_OUTPUT
+    elif [ "${{ github.ref }}" = "refs/heads/develop" ]; then
+      echo "base_path=${{ secrets.REMOTE_TARGET_DEV }}/wp-content" >> $GITHUB_OUTPUT
+    else
+      echo "base_path=${{ secrets.REMOTE_TARGET_STAGING }}/wp-content" >> $GITHUB_OUTPUT
+    fi
 ```
 
 ## 技術仕様
@@ -122,6 +109,23 @@ jobs:
 
 ワークフロー内で`ssh-keyscan`を使用してホストキーを自動取得しているため、通常は発生しません。問題が発生する場合は、`REMOTE_HOST`の設定を確認してください。
 
+## FAQ
+
+### `workflow_dispatch`の環境選択は機能しますか?
+
+現在のワークフローでは、手動実行時の環境選択入力は定義されていますが、実際のデプロイ先はpushされたブランチ名で判定されます。手動実行時に環境を切り替えたい場合は、ワークフローの修正が必要です。
+
+### Staging環境が不要な場合は?
+
+[deploy.yml](.github/workflows/deploy.yml)の`on.push.branches`から`staging`を削除してください:
+
+```yaml
+on:
+  push:
+    branches:
+      - main  # stagingを削除
+```
+
 ## ライセンス
 
-このワークフロー集は自由に使用・改変できます。
+このワークフローは自由に使用・改変できます。
